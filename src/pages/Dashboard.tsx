@@ -12,7 +12,7 @@ import {
 } from 'recharts';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { getDashboardStats, getMonthlyData, getProjectDistribution } from '@/services/mockData';
-import { MockEntryService, MockProjectService, MockUserService, MockWorkerService } from '@/services/mockData';
+import { MockEntryService, MockProjectService, MockProductService, MockUserService, MockWorkerService } from '@/services/mockData';
 import type { DashboardStats, Entry } from '@/types';
 
 function AnimatedNumber({ value, prefix = '' }: { value: number; prefix?: string }) {
@@ -34,18 +34,6 @@ function AnimatedNumber({ value, prefix = '' }: { value: number; prefix?: string
   return <>{prefix}{display.toLocaleString()}</>;
 }
 
-const QUICK_LINKS = [
-  { path: '/proyectos', label: 'Proyectos', icon: FolderKanban, color: '#1B4332', desc: `${MockProjectService.getAll().filter(p => p.status === 'active').length} activos` },
-  { path: '/almacen', label: 'Almacen', icon: Warehouse, color: '#2D6A4F', desc: `${MockWorkerService.getAll().filter(w => w.is_active).length} productos` },
-  { path: '/compras', label: 'Compras', icon: ShoppingCart, color: '#8B6914', desc: 'Historial' },
-  { path: '/facturas', label: 'Facturas', icon: FileText, color: '#C97B7B', desc: 'Por pagar' },
-  { path: '/trabajadores', label: 'Trabajadores', icon: Users, color: '#1B4332', desc: `${MockWorkerService.getAll().filter(w => w.is_active).length} activos` },
-  { path: '/gastos', label: 'Gastos Op.', icon: Receipt, color: '#6B6B6B', desc: 'Registro' },
-  { path: '/nominas', label: 'Nominas', icon: Banknote, color: '#8B6914', desc: 'Pagos' },
-  { path: '/prestamos', label: 'Prestamos', icon: HandCoins, color: '#D4A574', desc: 'Activos' },
-  { path: '/reporte', label: 'Reporte', icon: BarChart3, color: '#2D6A4F', desc: 'Gastos' },
-];
-
 export default function Dashboard() {
   const navigate = useNavigate();
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -60,6 +48,20 @@ export default function Dashboard() {
   const projectDist = useMemo(() => getProjectDistribution(), []);
   const projects = useMemo(() => MockProjectService.getAll(), []);
   const users = useMemo(() => MockUserService.getAll(), []);
+  const products = useMemo(() => MockProductService.getAll(), []);
+  const workers = useMemo(() => MockWorkerService.getAll(), []);
+
+  const QUICK_LINKS = useMemo(() => [
+    { path: '/proyectos', label: 'Proyectos', icon: FolderKanban, color: '#1B4332', desc: `${projects.filter(p => p.status === 'active').length} activos` },
+    { path: '/almacen', label: 'Almacen', icon: Warehouse, color: '#2D6A4F', desc: `${products.length} productos` },
+    { path: '/compras', label: 'Compras', icon: ShoppingCart, color: '#8B6914', desc: 'Historial' },
+    { path: '/facturas', label: 'Facturas', icon: FileText, color: '#C97B7B', desc: 'Por pagar' },
+    { path: '/trabajadores', label: 'Trabajadores', icon: Users, color: '#1B4332', desc: `${workers.filter(w => w.is_active).length} activos` },
+    { path: '/gastos', label: 'Gastos Op.', icon: Receipt, color: '#6B6B6B', desc: 'Registro' },
+    { path: '/nominas', label: 'Nominas', icon: Banknote, color: '#8B6914', desc: 'Pagos' },
+    { path: '/prestamos', label: 'Prestamos', icon: HandCoins, color: '#D4A574', desc: 'Activos' },
+    { path: '/reporte', label: 'Reporte', icon: BarChart3, color: '#2D6A4F', desc: 'Gastos' },
+  ], [projects, products, workers]);
 
   const getProjectName = (id: string) => projects.find(p => p.id === id)?.name || 'Proyecto';
   const getUserName = (id: string) => users.find(u => u.id === id)?.full_name || 'Usuario';
