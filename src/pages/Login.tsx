@@ -153,6 +153,9 @@ export default function Login() {
         <p className="text-center text-white/40 text-xs mt-6">
           Sistema de Gestion Financiera
         </p>
+        <p className="text-center text-white/25 text-[10px] mt-1 tracking-wider">
+          Creado por <span className="text-white/40 font-medium">SYSTEMASPRO.COM</span>
+        </p>
       </div>
 
       <style>{`
