@@ -185,7 +185,7 @@ export default function Usuarios() {
             <thead>
               <tr className="border-b border-[#E8E0D4]">
                 <th className="text-left text-xs font-medium text-[#9B9B9B] uppercase px-4 py-3">Nombre</th>
-                <th className="text-left text-xs font-medium text-[#9B9B9B] uppercase px-4 py-3">PIN</th>
+                <th className="text-left text-xs font-medium text-[#9B9B9B] uppercase px-4 py-3">Acceso</th>
                 <th className="text-left text-xs font-medium text-[#9B9B9B] uppercase px-4 py-3">Rol</th>
                 <th className="text-left text-xs font-medium text-[#9B9B9B] uppercase px-4 py-3 hidden lg:table-cell">Permisos</th>
                 <th className="text-left text-xs font-medium text-[#9B9B9B] uppercase px-4 py-3">Estado</th>
@@ -206,7 +206,11 @@ export default function Usuarios() {
                       </div>
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-sm font-mono text-[#6B6B6B]">{user.pin}</td>
+                  <td className="px-4 py-3">
+                    <span className="inline-flex items-center gap-1.5 text-sm font-mono text-[#9B9B9B] bg-[#F5F0E8] px-2.5 py-1 rounded-lg tracking-[0.25em]">
+                      ••••
+                    </span>
+                  </td>
                   <td className="px-4 py-3">
                     <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-medium ${
                       user.role === 'admin'
