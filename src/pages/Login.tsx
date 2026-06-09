@@ -147,24 +147,6 @@ export default function Login() {
             )}
           </button>
 
-          {/* Demo PINs */}
-          <div className="mt-6 pt-4 border-t border-[#E8E0D4]">
-            <p className="text-[10px] text-[#9B9B9B] text-center uppercase tracking-wider mb-2">PINs de demostracion</p>
-            <div className="flex justify-center gap-3">
-              <button
-                onClick={() => { setPin(['1','2','3','4']); setTimeout(() => handleSubmit(['1','2','3','4']), 100); }}
-                className="text-xs px-3 py-1.5 rounded-lg bg-[#F5F0E8] text-[#6B6B6B] hover:bg-[#E8E0D4] transition-colors"
-              >
-                Admin: 1234
-              </button>
-              <button
-                onClick={() => { setPin(['5','6','7','8']); setTimeout(() => handleSubmit(['5','6','7','8']), 100); }}
-                className="text-xs px-3 py-1.5 rounded-lg bg-[#F5F0E8] text-[#6B6B6B] hover:bg-[#E8E0D4] transition-colors"
-              >
-                Oper: 5678
-              </button>
-            </div>
-          </div>
         </div>
 
         {/* Footer */}
