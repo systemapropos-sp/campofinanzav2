@@ -11,7 +11,7 @@ const config = {
   host: '82.25.87.157',
   port: 21,
   localRoot: path.join(__dirname, 'dist'),
-  remoteRoot: '/public_html/',
+  remoteRoot: '/domains/campofinanzapro.com/public_html/',
   include: ['*', '**/*'],
   exclude: [],
   deleteRemote: false,

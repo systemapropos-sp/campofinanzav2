@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from '@/contexts/AuthContext';
+import InstallPrompt from '@/components/InstallPrompt';
 import Login from '@/pages/Login';
 import Dashboard from '@/pages/Dashboard';
 import Proyectos from '@/pages/Proyectos';
@@ -19,6 +20,7 @@ import Configuracion from '@/pages/Configuracion';
 export default function App() {
   return (
     <AuthProvider>
+      <InstallPrompt />
       <Routes>
         <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="/login" element={<Login />} />
