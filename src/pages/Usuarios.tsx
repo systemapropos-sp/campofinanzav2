@@ -22,6 +22,7 @@ const PERMISSION_LABELS: Record<keyof Permissions, string> = {
   loans: 'Prestamos',
   expense_report: 'Reporte',
   full_access: 'Acceso Total',
+  investors: 'Inversiones',
 };
 
 export default function Usuarios() {
@@ -40,7 +41,7 @@ export default function Usuarios() {
       dashboard: true, projects: false, warehouse: false, purchases: false,
       invoices: false, users: false, settings: false, workers: false,
       operational_expenses: false, payroll: false, loans: false,
-      expense_report: false, full_access: false,
+      expense_report: false, full_access: false, investors: false,
     },
     is_active: true,
   });
@@ -54,7 +55,7 @@ export default function Usuarios() {
         dashboard: true, projects: false, warehouse: false, purchases: false,
         invoices: false, users: false, settings: false, workers: false,
         operational_expenses: false, payroll: false, loans: false,
-        expense_report: false, full_access: false,
+        expense_report: false, full_access: false, investors: false,
       },
       is_active: true,
     });
@@ -83,6 +84,7 @@ export default function Usuarios() {
         loans: user.permissions.loans ?? false,
         expense_report: user.permissions.expense_report ?? false,
         full_access: user.permissions.full_access ?? false,
+        investors: user.permissions.investors ?? false,
       },
       is_active: user.is_active,
     });
@@ -132,7 +134,7 @@ export default function Usuarios() {
           purchases: newVal, invoices: newVal, users: newVal,
           settings: newVal, workers: newVal, operational_expenses: newVal,
           payroll: newVal, loans: newVal, expense_report: newVal,
-          full_access: newVal,
+          full_access: newVal, investors: newVal,
         }
       });
     } else {

@@ -15,6 +15,7 @@ const TABS = [
   { path: '/gastos', label: 'Gastos', perm: 'operational_expenses' as keyof UserType['permissions'] },
   { path: '/nominas', label: 'Nominas', perm: 'payroll' as keyof UserType['permissions'] },
   { path: '/prestamos', label: 'Prestamos', perm: 'loans' as keyof UserType['permissions'] },
+  { path: '/inversionistas', label: 'Inversiones', perm: 'investors' as keyof UserType['permissions'] },
   { path: '/reporte', label: 'Reporte', perm: 'expense_report' as keyof UserType['permissions'] },
   { path: '/usuarios', label: 'Usuarios', perm: 'users' as keyof UserType['permissions'] },
   { path: '/configuracion', label: 'Config.', perm: 'settings' as keyof UserType['permissions'] },

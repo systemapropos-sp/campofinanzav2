@@ -1,9 +1,11 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
+import { supabase } from '@/lib/supabase/client';
+import { initializeMockData } from '@/services/mockData';
 import type { User } from '@/types';
-import { MockAuthService, initializeMockData } from '@/services/mockData';
 
 interface AuthContextType {
   user: User | null;
+  businessId: string;
   isLoading: boolean;
   login: (pin: string) => Promise<boolean>;
   logout: () => void;
@@ -11,34 +13,70 @@ interface AuthContextType {
   hasPermission: (module: keyof User['permissions']) => boolean;
 }
 
+const SESSION_KEY = 'cf_user_session_v2';
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [businessId, setBusinessId] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    initializeMockData();
-    const session = MockAuthService.getSession();
-    if (session?.user) {
-      setUser(session.user);
+    async function restore() {
+      try {
+        const stored = localStorage.getItem(SESSION_KEY);
+        if (stored) {
+          const { user: u, businessId: bid } = JSON.parse(stored);
+          setUser(u);
+          setBusinessId(bid || '');
+          await initializeMockData(bid);
+        }
+      } catch { localStorage.removeItem(SESSION_KEY); }
+      setIsLoading(false);
     }
-    setIsLoading(false);
+    restore();
   }, []);
 
   const login = useCallback(async (pin: string): Promise<boolean> => {
-    const user = MockAuthService.login(pin);
-    if (user) {
-      setUser(user);
+    try {
+      const { data, error } = await supabase
+        .from('cf_usuarios_negocio')
+        .select('*')
+        .eq('pin', pin)
+        .eq('is_active', true)
+        .maybeSingle();
+
+      if (error || !data) return false;
+
+      const u: User = {
+        id: data.id,
+        pin: data.pin,
+        full_name: data.full_name,
+        email: data.email ?? undefined,
+        phone: data.phone ?? undefined,
+        role: data.role,
+        permissions: data.permissions,
+        is_active: data.is_active,
+        avatar_url: data.avatar_url ?? undefined,
+        created_at: data.created_at,
+      };
+
+      const bid = data.business_id as string;
+      await initializeMockData(bid);
+      setUser(u);
+      setBusinessId(bid);
+      localStorage.setItem(SESSION_KEY, JSON.stringify({ user: u, businessId: bid }));
       return true;
+    } catch {
+      return false;
     }
-    return false;
   }, []);
 
   const logout = useCallback(() => {
-    MockAuthService.logout();
+    localStorage.removeItem(SESSION_KEY);
     setUser(null);
-    window.location.reload();
+    setBusinessId('');
+    window.location.href = '/login';
   }, []);
 
   const isAdmin = user?.role === 'admin' || false;
@@ -46,11 +84,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const hasPermission = useCallback((module: keyof User['permissions']): boolean => {
     if (!user) return false;
     if (user.permissions.full_access) return true;
-    return user.permissions[module] || false;
+    return !!user.permissions[module];
   }, [user]);
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, logout, isAdmin, hasPermission }}>
+    <AuthContext.Provider value={{ user, businessId, isLoading, login, logout, isAdmin, hasPermission }}>
       {children}
     </AuthContext.Provider>
   );

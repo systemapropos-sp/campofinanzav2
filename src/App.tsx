@@ -11,6 +11,7 @@ import Trabajadores from '@/pages/Trabajadores';
 import GastosOperativos from '@/pages/GastosOperativos';
 import Nominas from '@/pages/Nominas';
 import Prestamos from '@/pages/Prestamos';
+import Inversionistas from '@/pages/Inversionistas';
 import ReporteGastos from '@/pages/ReporteGastos';
 import Usuarios from '@/pages/Usuarios';
 import Configuracion from '@/pages/Configuracion';
@@ -31,6 +32,7 @@ export default function App() {
         <Route path="/gastos" element={<GastosOperativos />} />
         <Route path="/nominas" element={<Nominas />} />
         <Route path="/prestamos" element={<Prestamos />} />
+        <Route path="/inversionistas" element={<Inversionistas />} />
         <Route path="/reporte" element={<ReporteGastos />} />
         <Route path="/usuarios" element={<Usuarios />} />
         <Route path="/configuracion" element={<Configuracion />} />

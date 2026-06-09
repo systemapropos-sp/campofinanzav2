@@ -25,6 +25,7 @@ export interface Permissions {
   loans: boolean;
   expense_report: boolean;
   full_access: boolean;
+  investors: boolean;
 }
 
 export interface Project {
@@ -188,6 +189,39 @@ export interface LoanDeduction {
   created_at: string;
 }
 
+// ── Inversionistas ──────────────────────────────────────────────────────────
+export interface Investor {
+  id: string;
+  business_id?: string;
+  nombre: string;
+  email?: string;
+  telefono?: string;
+  empresa?: string;
+  capital_total: number;
+  notas?: string;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface ProjectInvestor {
+  id: string;
+  business_id?: string;
+  proyecto_id: string;
+  project_name?: string;
+  inversionista_id: string;
+  investor_name?: string;
+  capital_invertido: number;
+  porcentaje_ganancia: number;
+  ganancia_estimada: number;
+  ganancia_real: number;
+  status: 'activo' | 'pagado' | 'cancelado';
+  fecha_inicio?: string;
+  fecha_pago?: string;
+  notas?: string;
+  created_at: string;
+}
+
+// ── Notification ───────────────────────────────────────────────────────────
 export interface Notification {
   id: string;
   user_id: string;

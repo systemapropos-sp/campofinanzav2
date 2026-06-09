@@ -1,495 +1,666 @@
+/**
+ * Supabase-backed data store — CampoFinanzas v2
+ * Maneja mapeo de columnas v1 (español) → v2 (inglés) con fallbacks
+ */
+import { supabase } from '@/lib/supabase/client';
 import type {
-  User, Project, Entry, Product, Purchase, InventoryMovement,
-  Invoice, Payment, Notification, AppSettings, DashboardStats,
-  MonthlyData, ProjectDistribution, Worker, OperationalExpense,
-  Payroll, Loan, LoanDeduction
+  User, Project, Product, Purchase, InventoryMovement,
+  Invoice, Worker, OperationalExpense, Payroll, Loan,
+  LoanDeduction, AppSettings, DashboardStats, MonthlyData,
+  ProjectDistribution, Investor, ProjectInvestor
 } from '@/types';
 
-// Seed data
-const seedUsers = (): User[] => [
-  {
-    id: 'u1', pin: '1234', full_name: 'Carlos Mendez', email: 'admin@campo.com', phone: '555-0100',
-    role: 'admin',
-    permissions: {
-      dashboard: true, projects: true, warehouse: true, purchases: true, invoices: true,
-      users: true, settings: true, workers: true, operational_expenses: true,
-      payroll: true, loans: true, expense_report: true, full_access: true,
-    },
-    is_active: true, created_at: '2024-01-15T00:00:00Z',
-  },
-  {
-    id: 'u2', pin: '5678', full_name: 'Maria Garcia', email: 'maria@campo.com', phone: '555-0101',
-    role: 'operator',
-    permissions: {
-      dashboard: true, projects: true, warehouse: true, purchases: true, invoices: false,
-      users: false, settings: false, workers: true, operational_expenses: true,
-      payroll: false, loans: false, expense_report: true, full_access: false,
-    },
-    is_active: true, created_at: '2024-02-01T00:00:00Z',
-  },
-  {
-    id: 'u3', pin: '9012', full_name: 'Juan Rodriguez', email: 'juan@campo.com', phone: '555-0102',
-    role: 'operator',
-    permissions: {
-      dashboard: true, projects: false, warehouse: true, purchases: false, invoices: false,
-      users: false, settings: false, workers: false, operational_expenses: false,
-      payroll: false, loans: false, expense_report: false, full_access: false,
-    },
-    is_active: true, created_at: '2024-03-10T00:00:00Z',
-  },
-];
-
-const seedWorkers = (): Worker[] => [
-  { id: 'w1', full_name: 'Pedro Hernandez', phone: '555-1001', daily_rate: 350, pay_frequency: 'daily', is_active: true, created_at: '2024-01-10T00:00:00Z' },
-  { id: 'w2', full_name: 'Luis Martinez', phone: '555-1002', daily_rate: 350, pay_frequency: 'daily', is_active: true, created_at: '2024-01-15T00:00:00Z' },
-  { id: 'w3', full_name: 'Ana Lopez', phone: '555-1003', daily_rate: 400, pay_frequency: 'weekly', is_active: true, created_at: '2024-02-01T00:00:00Z' },
-  { id: 'w4', full_name: 'Roberto Sanchez', phone: '555-1004', daily_rate: 350, pay_frequency: 'daily', is_active: true, created_at: '2024-02-10T00:00:00Z' },
-  { id: 'w5', full_name: 'Marta Diaz', phone: '555-1005', daily_rate: 400, pay_frequency: 'weekly', is_active: false, created_at: '2024-03-01T00:00:00Z' },
-  { id: 'w6', full_name: 'Jose Torres', phone: '555-1006', daily_rate: 350, pay_frequency: 'daily', is_active: true, created_at: '2024-03-15T00:00:00Z' },
-  { id: 'w7', full_name: 'Carmen Ruiz', phone: '555-1007', daily_rate: 380, pay_frequency: 'weekly', is_active: true, created_at: '2024-04-01T00:00:00Z' },
-  { id: 'w8', full_name: 'Fernando Castro', phone: '555-1008', daily_rate: 350, pay_frequency: 'daily', is_active: true, created_at: '2024-04-20T00:00:00Z' },
-];
-
-const seedProjects = (): Project[] => [
-  {
-    id: 'p1', name: 'Cosecha de Maiz 2024', description: 'Cosecha principal de maiz en el lote norte',
-    budget: 150000, spent: 87500, status: 'active', manager_id: 'u1', pipeline_stage: 'in_progress',
-    worker_ids: ['w1', 'w2', 'w3', 'w4'], created_by: 'u1', created_at: '2024-01-20T00:00:00Z',
-  },
-  {
-    id: 'p2', name: 'Riego Sistema Sur', description: 'Instalacion de sistema de riego en lotes sur',
-    budget: 80000, spent: 42000, status: 'active', manager_id: 'u2', pipeline_stage: 'in_progress',
-    worker_ids: ['w2', 'w5', 'w6'], created_by: 'u1', created_at: '2024-02-15T00:00:00Z',
-  },
-  {
-    id: 'p3', name: 'Cosecha de Trigo', description: 'Temporada de trigo primavera',
-    budget: 95000, spent: 95000, status: 'completed', manager_id: 'u1', pipeline_stage: 'completed',
-    worker_ids: ['w1', 'w3'], created_by: 'u2', created_at: '2024-03-01T00:00:00Z',
-  },
-  {
-    id: 'p4', name: 'Construccion Bodega', description: 'Ampliacion de bodega de almacenamiento',
-    budget: 120000, spent: 35000, status: 'active', manager_id: 'u1', pipeline_stage: 'planning',
-    worker_ids: ['w4', 'w6', 'w7', 'w8'], created_by: 'u1', created_at: '2024-04-10T00:00:00Z',
-  },
-  {
-    id: 'p5', name: 'Cultivo de Tomate', description: 'Invernadero de tomates organicos',
-    budget: 60000, spent: 15000, status: 'paused', manager_id: 'u2', pipeline_stage: 'review',
-    worker_ids: ['w3', 'w7'], created_by: 'u2', created_at: '2024-05-01T00:00:00Z',
-  },
-  {
-    id: 'p6', name: 'Siembra de Cana', description: 'Siembra de cana de azucar',
-    budget: 200000, spent: 120000, status: 'active', manager_id: 'u1', pipeline_stage: 'in_progress',
-    worker_ids: ['w1', 'w2', 'w4', 'w6', 'w8'], created_by: 'u1', created_at: '2024-06-15T00:00:00Z',
-  },
-];
-
-const seedProducts = (): Product[] => [
-  { id: 'pr1', name: 'Fertilizante NPK 20-20-20', description: 'Fertilizante completo para uso general', sku: 'NPK-2020', category: 'Fertilizantes', price: 450, quantity: 120, min_stock: 20, image_url: '', created_at: '2024-01-01T00:00:00Z' },
-  { id: 'pr2', name: 'Herbicida Glyphosate', description: 'Herbicida no selectivo', sku: 'GLY-41', category: 'Herbicidas', price: 280, quantity: 45, min_stock: 15, image_url: '', created_at: '2024-01-05T00:00:00Z' },
-  { id: 'pr3', name: 'Semilla de Maiz Hibrido', description: 'Semilla certificada hibrida', sku: 'SEM-MAIZ', category: 'Semillas', price: 1200, quantity: 8, min_stock: 10, image_url: '', created_at: '2024-02-01T00:00:00Z' },
-  { id: 'pr4', name: 'Manguera de Riego 2"', description: 'Manguera PVC para riego', sku: 'MAN-2IN', category: 'Equipo', price: 85, quantity: 200, min_stock: 30, image_url: '', created_at: '2024-02-15T00:00:00Z' },
-  { id: 'pr5', name: 'Pala de Acero', description: 'Pala para trabajo pesado', sku: 'PAL-001', category: 'Herramientas', price: 350, quantity: 15, min_stock: 5, image_url: '', created_at: '2024-03-01T00:00:00Z' },
-  { id: 'pr6', name: 'Insecticida Organico', description: 'Control biologico de plagas', sku: 'INS-ORG', category: 'Insecticidas', price: 520, quantity: 32, min_stock: 10, image_url: '', created_at: '2024-03-15T00:00:00Z' },
-  { id: 'pr7', name: 'Semilla de Trigo', description: 'Trigo hard red spring', sku: 'SEM-TRIG', category: 'Semillas', price: 890, quantity: 50, min_stock: 15, image_url: '', created_at: '2024-04-01T00:00:00Z' },
-  { id: 'pr8', name: 'Tuberia PVC 4"', description: 'Tuberia para sistema de riego', sku: 'TUB-4IN', category: 'Equipo', price: 120, quantity: 3, min_stock: 10, image_url: '', created_at: '2024-04-15T00:00:00Z' },
-  { id: 'pr9', name: 'Guantes de Trabajo', description: 'Guantes de cuero reforzados', sku: 'GUA-001', category: 'Seguridad', price: 150, quantity: 60, min_stock: 20, image_url: '', created_at: '2024-05-01T00:00:00Z' },
-  { id: 'pr10', name: 'Casco de Seguridad', description: 'Caspo con visera', sku: 'CAS-001', category: 'Seguridad', price: 280, quantity: 25, min_stock: 10, image_url: '', created_at: '2024-05-15T00:00:00Z' },
-];
-
-const seedEntries = (): Entry[] => {
-  const entries: Entry[] = [];
-  const projects = seedProjects();
-  const users = seedUsers();
-  for (let i = 0; i < 40; i++) {
-    const project = projects[Math.floor(Math.random() * projects.length)];
-    const user = users[Math.floor(Math.random() * users.length)];
-    const date = new Date(2024, Math.floor(Math.random() * 6), Math.floor(Math.random() * 28) + 1);
-    entries.push({
-      id: `e${i + 1}`, project_id: project.id, quantity: Math.floor(Math.random() * 100) + 1,
-      amount: Math.floor(Math.random() * 5000) + 500, date: date.toISOString().split('T')[0],
-      time: `${String(Math.floor(Math.random() * 24)).padStart(2, '0')}:${String(Math.floor(Math.random() * 60)).padStart(2, '0')}`,
-      user_id: user.id, notes: `Entrega de materiales lote ${i + 1}`, created_at: date.toISOString(),
-    });
-  }
-  return entries.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+let BID = '';
+let _projects: Project[] = [];
+let _products: Product[] = [];
+let _purchases: Purchase[] = [];
+let _invoices: Invoice[] = [];
+let _workers: Worker[] = [];
+let _expenses: OperationalExpense[] = [];
+let _payrolls: Payroll[] = [];
+let _loans: Loan[] = [];
+let _users: User[] = [];
+let _investors: Investor[] = [];
+let _projectInvestors: ProjectInvestor[] = [];
+let _settings: AppSettings = {
+  company_name: 'CampoFinanzas',
+  currency_symbol: 'RD$',
+  date_format: 'DD/MM/YYYY',
+  theme: 'light',
+  session_timeout: 30
 };
 
-const seedPurchases = (): Purchase[] => {
-  const purchases: Purchase[] = [];
-  const products = seedProducts();
-  const users = seedUsers();
-  for (let i = 0; i < 25; i++) {
-    const product = products[Math.floor(Math.random() * products.length)];
-    const user = users[Math.floor(Math.random() * users.length)];
-    const qty = Math.floor(Math.random() * 50) + 5;
-    const price = Math.floor(Math.random() * 500) + 100;
-    const date = new Date(2024, Math.floor(Math.random() * 6), Math.floor(Math.random() * 28) + 1);
-    purchases.push({
-      id: `pc${i + 1}`, product_id: product.id, supplier: `Proveedor ${String.fromCharCode(65 + Math.floor(Math.random() * 5))}`,
-      quantity: qty, unit_price: price, total: qty * price, date: date.toISOString().split('T')[0],
-      created_by: user.id, created_at: date.toISOString(),
-    });
-  }
-  return purchases.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-};
+export async function initializeMockData(businessId?: string) {
+  if (businessId) BID = businessId;
+  if (!BID) return;
+  try {
+    const [p, inv, comp, fact, emp, gop, nom, prest, usu, conf, inv2, pi] = await Promise.all([
+      supabase.from('cf_proyectos').select('*').eq('business_id', BID),
+      supabase.from('cf_inventario').select('*').eq('business_id', BID),
+      supabase.from('cf_compras').select('*').eq('business_id', BID).order('date', { ascending: false }),
+      supabase.from('cf_facturas').select('*').eq('business_id', BID).order('created_at', { ascending: false }),
+      supabase.from('cf_empleados').select('*').eq('business_id', BID),
+      supabase.from('cf_gastos_operativos').select('*').eq('business_id', BID).order('date', { ascending: false }),
+      supabase.from('cf_nominas').select('*').eq('business_id', BID).order('created_at', { ascending: false }),
+      supabase.from('cf_prestamos').select('*').eq('business_id', BID),
+      supabase.from('cf_usuarios_negocio').select('*').eq('business_id', BID),
+      supabase.from('cf_configuracion').select('*').eq('business_id', BID).maybeSingle(),
+      // Inversionistas — graceful if table doesn't exist yet
+      Promise.resolve(supabase.from('cf_inversionistas').select('*').eq('business_id', BID)).catch(() => ({ data: [] })),
+      Promise.resolve(supabase.from('cf_proyecto_inversionistas').select('*').eq('business_id', BID)).catch(() => ({ data: [] })),
+    ]);
 
-const seedMovements = (): InventoryMovement[] => {
-  const movements: InventoryMovement[] = [];
-  const products = seedProducts();
-  const users = seedUsers();
-  const types: ('in' | 'out' | 'assignment')[] = ['in', 'out', 'assignment'];
-  for (let i = 0; i < 30; i++) {
-    const product = products[Math.floor(Math.random() * products.length)];
-    const user = users[Math.floor(Math.random() * users.length)];
-    const assigned = users[Math.floor(Math.random() * users.length)];
-    const type = types[Math.floor(Math.random() * types.length)];
-    const date = new Date(2024, Math.floor(Math.random() * 6), Math.floor(Math.random() * 28) + 1);
-    movements.push({
-      id: `m${i + 1}`, product_id: product.id, type, quantity: Math.floor(Math.random() * 20) + 1,
-      user_id: user.id, assigned_to: type === 'assignment' ? assigned.id : undefined,
-      notes: `Movimiento ${type} registrado`, created_at: date.toISOString(),
-    });
-  }
-  return movements.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-};
+    _projects = (p.data || []).map((r: any): Project => ({
+      id: r.id,
+      name: r.name ?? r.nombre ?? '',
+      description: r.description ?? r.descripcion ?? '',
+      budget: r.budget ?? r.presupuesto ?? 0,
+      spent: r.spent ?? r.gastado ?? 0,
+      status: r.status ?? r.estado ?? 'active',
+      created_by: r.id,
+      created_by_name: r.manager_name ?? r.gerente ?? '',
+      manager_id: undefined,
+      pipeline_stage: r.pipeline_stage ?? 'in_progress',
+      worker_ids: [],
+      created_at: r.created_at
+    }));
 
-const seedInvoices = (): Invoice[] => {
-  const invoices: Invoice[] = [];
-  const projects = seedProjects();
-  const statuses: ('pending' | 'partial' | 'paid')[] = ['pending', 'partial', 'paid'];
-  for (let i = 0; i < 20; i++) {
-    const project = projects[Math.floor(Math.random() * projects.length)];
-    const amount = Math.floor(Math.random() * 15000) + 1000;
-    const status = statuses[Math.floor(Math.random() * statuses.length)];
-    const paid = status === 'paid' ? amount : status === 'partial' ? Math.floor(amount * 0.4) : 0;
-    const isCash = Math.random() > 0.5;
-    const creditDays = isCash ? undefined : [15, 30, 45, 60][Math.floor(Math.random() * 4)];
-    const date = new Date(2024, Math.floor(Math.random() * 6), Math.floor(Math.random() * 28) + 1);
-    invoices.push({
-      id: `inv${i + 1}`, project_id: project.id, invoice_number: `FAC-2024-${String(i + 1).padStart(4, '0')}`,
-      supplier: `Proveedor ${String.fromCharCode(65 + Math.floor(Math.random() * 8))}`, amount,
-      payment_type: isCash ? 'cash' : 'credit', credit_days: creditDays, status,
-      due_date: new Date(date.getTime() + (creditDays || 30) * 86400000).toISOString().split('T')[0],
-      paid_amount: paid, notes: '', created_at: date.toISOString(),
-    });
-  }
-  return invoices.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-};
+    _products = (inv.data || []).map((r: any): Product => ({
+      id: r.id,
+      name: r.name ?? r.nombre ?? '',
+      description: r.description ?? r.descripcion ?? '',
+      sku: r.sku ?? r.codigo ?? '',
+      category: r.category ?? r.categoria ?? r.tipo ?? '',
+      price: r.price ?? r.precio ?? 0,
+      quantity: r.quantity ?? r.cantidad ?? r.stock ?? 0,
+      min_stock: r.min_stock ?? r.stock_minimo ?? 5,
+      image_url: r.image_url ?? r.imagen_url ?? '',
+      created_at: r.created_at
+    }));
 
-const seedPayments = (): Payment[] => {
-  const payments: Payment[] = [];
-  const invoices = seedInvoices();
-  const methods: ('cash' | 'transfer' | 'check')[] = ['cash', 'transfer', 'check'];
-  let idx = 1;
-  for (const inv of invoices) {
-    if (inv.status !== 'pending') {
-      const numPayments = inv.status === 'paid' ? Math.floor(Math.random() * 2) + 1 : 1;
-      for (let j = 0; j < numPayments; j++) {
-        payments.push({
-          id: `pay${idx++}`, invoice_id: inv.id,
-          amount: j === 0 ? inv.paid_amount : Math.floor(Math.random() * 2000) + 500,
-          payment_date: new Date(2024, Math.floor(Math.random() * 6), Math.floor(Math.random() * 28) + 1).toISOString().split('T')[0],
-          payment_method: methods[Math.floor(Math.random() * methods.length)], notes: '',
-          created_at: new Date().toISOString(),
-        });
-      }
+    _purchases = (comp.data || []).map((r: any): Purchase => ({
+      id: r.id,
+      product_id: r.product_id ?? r.producto_id ?? '',
+      product_name: r.product_name ?? r.nombre_producto ?? r.producto ?? '',
+      supplier: r.supplier ?? r.proveedor ?? '',
+      quantity: r.quantity ?? r.cantidad ?? 0,
+      unit_price: r.unit_price ?? r.precio_unitario ?? 0,
+      total: r.total ?? r.monto ?? 0,
+      image_url: r.image_url ?? r.imagen_url ?? '',
+      date: r.date ?? r.fecha ?? r.created_at,
+      created_by: r.id,
+      created_by_name: '',
+      created_at: r.created_at
+    }));
+
+    _invoices = (fact.data || []).map((r: any): Invoice => ({
+      id: r.id,
+      project_id: r.project_id ?? r.proyecto_id ?? '',
+      project_name: r.project_name ?? r.nombre_proyecto ?? '',
+      invoice_number: r.invoice_number ?? r.numero_factura ?? '',
+      supplier: r.supplier ?? r.proveedor ?? '',
+      amount: r.amount ?? r.monto ?? 0,
+      payment_type: r.payment_type ?? r.tipo_pago ?? 'cash',
+      credit_days: r.credit_days ?? r.dias_credito ?? 0,
+      status: r.status ?? r.estado ?? 'pending',
+      paid_amount: r.paid_amount ?? r.monto_pagado ?? 0,
+      image_url: r.image_url ?? '',
+      notes: r.notes ?? r.notas ?? '',
+      due_date: r.due_date ?? r.fecha_vencimiento ?? '',
+      created_at: r.created_at
+    }));
+
+    _workers = (emp.data || []).map((r: any): Worker => ({
+      id: r.id,
+      full_name: r.full_name ?? r.nombre ?? r.name ?? '',
+      phone: r.phone ?? r.telefono ?? '',
+      daily_rate: r.daily_rate ?? r.tarifa_diaria ?? r.salario_diario ?? 0,
+      pay_frequency: r.pay_frequency ?? r.frecuencia_pago ?? 'daily',
+      is_active: r.is_active ?? r.activo ?? true,
+      avatar_url: r.avatar_url ?? '',
+      created_at: r.created_at
+    }));
+
+    _expenses = (gop.data || []).map((r: any): OperationalExpense => ({
+      id: r.id,
+      category: r.category ?? r.categoria ?? 'other',
+      description: r.description ?? r.descripcion ?? '',
+      amount: r.amount ?? r.monto ?? 0,
+      date: r.date ?? r.fecha ?? r.created_at,
+      project_id: r.project_id ?? r.proyecto_id ?? '',
+      project_name: r.project_name ?? r.nombre_proyecto ?? '',
+      receipt_url: r.receipt_url ?? r.comprobante_url ?? '',
+      created_by: '',
+      created_at: r.created_at
+    }));
+
+    _payrolls = (nom.data || []).map((r: any): Payroll => ({
+      id: r.id,
+      worker_id: r.worker_id ?? r.empleado_id ?? r.trabajador_id ?? '',
+      worker_name: r.worker_name ?? r.nombre_empleado ?? r.nombre_trabajador ?? '',
+      project_id: r.project_id ?? r.proyecto_id ?? '',
+      project_name: r.project_name ?? r.nombre_proyecto ?? '',
+      days_worked: r.days_worked ?? r.dias_trabajados ?? 0,
+      daily_rate: r.daily_rate ?? r.tarifa_diaria ?? 0,
+      total: r.total ?? r.monto ?? 0,
+      week_start: r.week_start ?? r.semana_inicio ?? '',
+      week_end: r.week_end ?? r.semana_fin ?? '',
+      is_paid: r.is_paid ?? r.pagado ?? false,
+      paid_date: r.paid_date ?? r.fecha_pago ?? '',
+      notes: r.notes ?? r.notas ?? '',
+      created_at: r.created_at
+    }));
+
+    const loansRaw = prest.data || [];
+    const loanIds = loansRaw.map((l: any) => l.id);
+    let deductions: LoanDeduction[] = [];
+    if (loanIds.length > 0) {
+      const { data: ded } = await supabase.from('cf_deducciones_prestamo').select('*').in('loan_id', loanIds);
+      deductions = (ded || []).map((d: any): LoanDeduction => ({
+        id: d.id,
+        loan_id: d.loan_id,
+        amount: d.amount ?? d.monto ?? 0,
+        date: d.date ?? d.fecha ?? d.created_at,
+        notes: d.notes ?? d.notas ?? '',
+        created_at: d.created_at
+      }));
     }
-  }
-  return payments;
-};
+    _loans = loansRaw.map((r: any): Loan => ({
+      id: r.id,
+      worker_id: r.worker_id ?? r.empleado_id ?? '',
+      worker_name: r.worker_name ?? r.nombre_empleado ?? '',
+      amount: r.amount ?? r.monto ?? 0,
+      remaining: r.remaining ?? r.saldo ?? r.amount ?? 0,
+      status: r.status ?? r.estado ?? 'active',
+      date: r.date ?? r.fecha ?? r.created_at,
+      notes: r.notes ?? r.notas ?? '',
+      created_at: r.created_at,
+      deductions: deductions.filter(d => d.loan_id === r.id)
+    }));
 
-const seedOperationalExpenses = (): OperationalExpense[] => {
-  const categories: OperationalExpense['category'][] = ['fuel', 'maintenance', 'utilities', 'transport', 'food', 'other'];
-  const projects = seedProjects();
-  const users = seedUsers();
-  const expenses: OperationalExpense[] = [];
-  for (let i = 0; i < 30; i++) {
-    const cat = categories[Math.floor(Math.random() * categories.length)];
-    const proj = projects[Math.floor(Math.random() * projects.length)];
-    const date = new Date(2024, Math.floor(Math.random() * 6), Math.floor(Math.random() * 28) + 1);
-    expenses.push({
-      id: `oe${i + 1}`, category: cat,
-      description: `Gasto en ${cat} para operacion ${i + 1}`,
-      amount: Math.floor(Math.random() * 5000) + 200,
-      date: date.toISOString().split('T')[0], project_id: proj.id,
-      created_by: users[Math.floor(Math.random() * users.length)].id,
-      created_at: date.toISOString(),
-    });
-  }
-  return expenses.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-};
+    _users = (usu.data || []).map((r: any): User => ({
+      id: r.id,
+      pin: r.pin,
+      full_name: r.full_name ?? r.nombre ?? '',
+      email: r.email ?? '',
+      phone: r.phone ?? r.telefono ?? '',
+      role: r.role ?? r.rol ?? 'operator',
+      permissions: r.permissions ?? {
+        dashboard: true, projects: false, warehouse: false, purchases: false,
+        invoices: false, users: false, settings: false, workers: false,
+        operational_expenses: false, payroll: false, loans: false,
+        expense_report: false, full_access: false, investors: false
+      },
+      is_active: r.is_active ?? r.activo ?? true,
+      avatar_url: r.avatar_url ?? '',
+      created_at: r.created_at
+    }));
 
-const seedPayrolls = (): Payroll[] => {
-  const workers = seedWorkers();
-  const projects = seedProjects();
-  const payrolls: Payroll[] = [];
-  for (let i = 0; i < 20; i++) {
-    const worker = workers[Math.floor(Math.random() * workers.length)];
-    const project = projects[Math.floor(Math.random() * projects.length)];
-    const days = Math.floor(Math.random() * 6) + 1;
-    const startDate = new Date(2024, Math.floor(Math.random() * 6), Math.floor(Math.random() * 20) + 1);
-    const endDate = new Date(startDate.getTime() + 6 * 86400000);
-    payrolls.push({
-      id: `py${i + 1}`, worker_id: worker.id, project_id: project.id,
-      days_worked: days, daily_rate: worker.daily_rate, total: days * worker.daily_rate,
-      week_start: startDate.toISOString().split('T')[0], week_end: endDate.toISOString().split('T')[0],
-      is_paid: Math.random() > 0.3, paid_date: Math.random() > 0.3 ? endDate.toISOString().split('T')[0] : undefined,
-      notes: '', created_at: startDate.toISOString(),
-    });
-  }
-  return payrolls.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-};
-
-const seedLoans = (): Loan[] => {
-  const workers = seedWorkers();
-  const loans: Loan[] = [];
-  for (let i = 0; i < 8; i++) {
-    const worker = workers[Math.floor(Math.random() * workers.length)];
-    const amount = Math.floor(Math.random() * 5000) + 1000;
-    const deductions: LoanDeduction[] = [];
-    const numDeductions = Math.floor(Math.random() * 3);
-    let remaining = amount;
-    for (let j = 0; j < numDeductions; j++) {
-      const dedAmount = Math.min(Math.floor(amount * 0.3) + 100, remaining);
-      remaining -= dedAmount;
-      deductions.push({
-        id: `ld${i}-${j}`, loan_id: `ln${i + 1}`, amount: dedAmount,
-        date: new Date(2024, Math.floor(Math.random() * 6), Math.floor(Math.random() * 28) + 1).toISOString().split('T')[0],
-        notes: '', created_at: new Date().toISOString(),
-      });
+    const c = (conf as any).data;
+    if (c) {
+      _settings = {
+        company_name: c.empresa ?? c.company_name ?? 'Campo',
+        company_address: c.direccion ?? c.company_address ?? '',
+        company_phone: c.telefono ?? c.company_phone ?? '',
+        currency_symbol: c.moneda ?? c.currency_symbol ?? 'RD$',
+        date_format: c.formato_fecha ?? c.date_format ?? 'DD/MM/YYYY',
+        theme: c.tema ?? c.theme ?? 'light',
+        session_timeout: 30
+      };
     }
-    const date = new Date(2024, Math.floor(Math.random() * 5), Math.floor(Math.random() * 28) + 1);
-    loans.push({
-      id: `ln${i + 1}`, worker_id: worker.id, amount, remaining: Math.max(0, remaining),
-      status: remaining <= 0 ? 'paid' : 'active', date: date.toISOString().split('T')[0],
-      notes: `Prestamo para ${worker.full_name}`, deductions,
-      created_at: date.toISOString(),
+
+    // Inversionistas (puede que no exista la tabla aún)
+    _investors = ((inv2 as any).data || []).map((r: any): Investor => ({
+      id: r.id,
+      business_id: r.business_id,
+      nombre: r.nombre ?? '',
+      email: r.email ?? '',
+      telefono: r.telefono ?? '',
+      empresa: r.empresa ?? '',
+      capital_total: r.capital_total ?? 0,
+      notas: r.notas ?? '',
+      is_active: r.is_active ?? true,
+      created_at: r.created_at
+    }));
+
+    // Enriquecer project investors con nombres
+    _projectInvestors = ((pi as any).data || []).map((r: any): ProjectInvestor => {
+      const proj = _projects.find(p => p.id === r.proyecto_id);
+      const inv = _investors.find(i => i.id === r.inversionista_id);
+      return {
+        id: r.id,
+        business_id: r.business_id,
+        proyecto_id: r.proyecto_id ?? '',
+        project_name: proj?.name ?? '',
+        inversionista_id: r.inversionista_id ?? '',
+        investor_name: inv?.nombre ?? '',
+        capital_invertido: r.capital_invertido ?? 0,
+        porcentaje_ganancia: r.porcentaje_ganancia ?? 0,
+        ganancia_estimada: r.ganancia_estimada ?? 0,
+        ganancia_real: r.ganancia_real ?? 0,
+        status: r.status ?? 'activo',
+        fecha_inicio: r.fecha_inicio ?? '',
+        fecha_pago: r.fecha_pago ?? '',
+        notas: r.notas ?? '',
+        created_at: r.created_at
+      };
     });
-  }
-  return loans.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-};
 
-const seedNotifications = (): Notification[] => [
-  { id: 'n1', user_id: 'u1', title: 'Stock bajo', message: 'Semilla de Maiz Hibrido tiene solo 8 unidades restantes', type: 'low_stock', is_read: false, created_at: '2024-06-20T10:00:00Z' },
-  { id: 'n2', user_id: 'u1', title: 'Pago aplicado', message: 'Se aplico un pago de $3,500 a la factura FAC-2024-0001', type: 'payment', is_read: false, created_at: '2024-06-20T09:30:00Z' },
-  { id: 'n3', user_id: 'u1', title: 'Compra registrada', message: 'Se registro la compra de Fertilizante NPK por $12,000', type: 'purchase', is_read: true, created_at: '2024-06-19T16:00:00Z' },
-  { id: 'n4', user_id: 'u1', title: 'Nueva entrada', message: 'Maria Garcia registro una nueva entrada en Cosecha de Maiz', type: 'entry', is_read: true, created_at: '2024-06-19T14:20:00Z' },
-  { id: 'n5', user_id: 'u1', title: 'Movimiento de inventario', message: 'Se asignaron 5 Fertilizante NPK a Juan Rodriguez', type: 'movement', is_read: false, created_at: '2024-06-18T11:00:00Z' },
-  { id: 'n6', user_id: 'u1', title: 'Factura vencida', message: 'La factura FAC-2024-0005 vencio el 15/06/2024', type: 'payment', is_read: false, created_at: '2024-06-17T00:00:00Z' },
-  { id: 'n7', user_id: 'u1', title: 'Stock bajo', message: 'Tuberia PVC 4" tiene solo 3 unidades restantes', type: 'low_stock', is_read: false, created_at: '2024-06-16T09:00:00Z' },
-  { id: 'n8', user_id: 'u1', title: 'Compra registrada', message: 'Se registro la compra de Herbicida Glyphosate por $8,400', type: 'purchase', is_read: true, created_at: '2024-06-15T15:30:00Z' },
-];
-
-const defaultSettings: AppSettings = {
-  company_name: 'Campo El Progreso', company_address: 'Carretera Norte Km 45, Zona Rural',
-  company_phone: '555-0000', currency_symbol: '$', date_format: 'dd/MM/yyyy',
-  theme: 'light', session_timeout: 8,
-};
-
-// LocalStorage helpers
-const STORAGE_KEYS = {
-  users: 'cf_users', projects: 'cf_projects', entries: 'cf_entries', products: 'cf_products',
-  purchases: 'cf_purchases', movements: 'cf_movements', invoices: 'cf_invoices', payments: 'cf_payments',
-  notifications: 'cf_notifications', settings: 'cf_settings', session: 'cf_session',
-  workers: 'cf_workers', operational_expenses: 'cf_op_expenses', payrolls: 'cf_payrolls', loans: 'cf_loans',
-};
-
-function getStorageItem<T>(key: string, fallback: T): T {
-  try { const item = localStorage.getItem(key); return item ? JSON.parse(item) : fallback; }
-  catch { return fallback; }
+  } catch (e) { console.error('Store load error:', e); }
 }
 
-function setStorageItem<T>(key: string, value: T): void {
-  localStorage.setItem(key, JSON.stringify(value));
-}
-
-export function initializeMockData(): void {
-  if (!localStorage.getItem(STORAGE_KEYS.users)) setStorageItem(STORAGE_KEYS.users, seedUsers());
-  if (!localStorage.getItem(STORAGE_KEYS.projects)) setStorageItem(STORAGE_KEYS.projects, seedProjects());
-  if (!localStorage.getItem(STORAGE_KEYS.entries)) setStorageItem(STORAGE_KEYS.entries, seedEntries());
-  if (!localStorage.getItem(STORAGE_KEYS.products)) setStorageItem(STORAGE_KEYS.products, seedProducts());
-  if (!localStorage.getItem(STORAGE_KEYS.purchases)) setStorageItem(STORAGE_KEYS.purchases, seedPurchases());
-  if (!localStorage.getItem(STORAGE_KEYS.movements)) setStorageItem(STORAGE_KEYS.movements, seedMovements());
-  if (!localStorage.getItem(STORAGE_KEYS.invoices)) setStorageItem(STORAGE_KEYS.invoices, seedInvoices());
-  if (!localStorage.getItem(STORAGE_KEYS.payments)) setStorageItem(STORAGE_KEYS.payments, seedPayments());
-  if (!localStorage.getItem(STORAGE_KEYS.notifications)) setStorageItem(STORAGE_KEYS.notifications, seedNotifications());
-  if (!localStorage.getItem(STORAGE_KEYS.settings)) setStorageItem(STORAGE_KEYS.settings, defaultSettings);
-  if (!localStorage.getItem(STORAGE_KEYS.workers)) setStorageItem(STORAGE_KEYS.workers, seedWorkers());
-  if (!localStorage.getItem(STORAGE_KEYS.operational_expenses)) setStorageItem(STORAGE_KEYS.operational_expenses, seedOperationalExpenses());
-  if (!localStorage.getItem(STORAGE_KEYS.payrolls)) setStorageItem(STORAGE_KEYS.payrolls, seedPayrolls());
-  if (!localStorage.getItem(STORAGE_KEYS.loans)) setStorageItem(STORAGE_KEYS.loans, seedLoans());
-}
-
-// Generic CRUD
-function getAll<T>(key: string): T[] { return getStorageItem<T[]>(key, []); }
-function getById<T extends { id: string }>(key: string, id: string): T | undefined { return getAll<T>(key).find(i => i.id === id); }
-function create<T extends { id: string }>(key: string, item: T): T { const items = getAll<T>(key); items.unshift(item); setStorageItem(key, items); return item; }
-function update<T extends { id: string }>(key: string, id: string, updates: Partial<T>): T | undefined {
-  const items = getAll<T>(key); const idx = items.findIndex(i => i.id === id);
-  if (idx === -1) return undefined; items[idx] = { ...items[idx], ...updates }; setStorageItem(key, items); return items[idx];
-}
-function remove<T extends { id: string }>(key: string, id: string): boolean {
-  const items = getAll<T>(key); const filtered = items.filter(i => i.id !== id);
-  if (filtered.length === items.length) return false; setStorageItem(key, filtered); return true;
-}
-
-// Auth Service
-export const MockAuthService = {
-  login: (pin: string): User | null => {
-    const users = getAll<User>(STORAGE_KEYS.users);
-    const user = users.find(u => u.pin === pin && u.is_active);
-    if (user) setStorageItem(STORAGE_KEYS.session, { user, loginAt: new Date().toISOString() });
-    return user || null;
-  },
-  logout: () => { localStorage.removeItem(STORAGE_KEYS.session); },
-  getSession: (): { user: User } | null => getStorageItem(STORAGE_KEYS.session, null),
-};
-
-// User Service
-export const MockUserService = {
-  getAll: () => getAll<User>(STORAGE_KEYS.users),
-  getById: (id: string) => getById<User>(STORAGE_KEYS.users, id),
-  create: (user: User) => create<User>(STORAGE_KEYS.users, user),
-  update: (id: string, updates: Partial<User>) => update<User>(STORAGE_KEYS.users, id, updates),
-  delete: (id: string) => remove<User>(STORAGE_KEYS.users, id),
-};
-
-// Worker Service
-export const MockWorkerService = {
-  getAll: () => getAll<Worker>(STORAGE_KEYS.workers),
-  getById: (id: string) => getById<Worker>(STORAGE_KEYS.workers, id),
-  getActive: () => getAll<Worker>(STORAGE_KEYS.workers).filter(w => w.is_active),
-  create: (worker: Worker) => create<Worker>(STORAGE_KEYS.workers, worker),
-  update: (id: string, updates: Partial<Worker>) => update<Worker>(STORAGE_KEYS.workers, id, updates),
-  delete: (id: string) => remove<Worker>(STORAGE_KEYS.workers, id),
-};
-
-// Project Service
-export const MockProjectService = {
-  getAll: () => getAll<Project>(STORAGE_KEYS.projects),
-  getById: (id: string) => getById<Project>(STORAGE_KEYS.projects, id),
-  create: (project: Project) => create<Project>(STORAGE_KEYS.projects, project),
-  update: (id: string, updates: Partial<Project>) => update<Project>(STORAGE_KEYS.projects, id, updates),
-  delete: (id: string) => remove<Project>(STORAGE_KEYS.projects, id),
-};
-
-// Entry Service
-export const MockEntryService = {
-  getAll: () => getAll<Entry>(STORAGE_KEYS.entries),
-  getByProject: (projectId: string) => getAll<Entry>(STORAGE_KEYS.entries).filter(e => e.project_id === projectId),
-  create: (entry: Entry) => create<Entry>(STORAGE_KEYS.entries, entry),
-  update: (id: string, updates: Partial<Entry>) => update<Entry>(STORAGE_KEYS.entries, id, updates),
-  delete: (id: string) => remove<Entry>(STORAGE_KEYS.entries, id),
-};
-
-// Product Service
-export const MockProductService = {
-  getAll: () => getAll<Product>(STORAGE_KEYS.products),
-  getById: (id: string) => getById<Product>(STORAGE_KEYS.products, id),
-  create: (product: Product) => create<Product>(STORAGE_KEYS.products, product),
-  update: (id: string, updates: Partial<Product>) => update<Product>(STORAGE_KEYS.products, id, updates),
-  delete: (id: string) => remove<Product>(STORAGE_KEYS.products, id),
-};
-
-// Purchase Service
-export const MockPurchaseService = {
-  getAll: () => getAll<Purchase>(STORAGE_KEYS.purchases),
-  create: (purchase: Purchase) => create<Purchase>(STORAGE_KEYS.purchases, purchase),
-  update: (id: string, updates: Partial<Purchase>) => update<Purchase>(STORAGE_KEYS.purchases, id, updates),
-  delete: (id: string) => remove<Purchase>(STORAGE_KEYS.purchases, id),
-};
-
-// Movement Service
-export const MockMovementService = {
-  getAll: () => getAll<InventoryMovement>(STORAGE_KEYS.movements),
-  getByProduct: (productId: string) => getAll<InventoryMovement>(STORAGE_KEYS.movements).filter(m => m.product_id === productId),
-  create: (movement: InventoryMovement) => create<InventoryMovement>(STORAGE_KEYS.movements, movement),
-};
-
-// Invoice Service
-export const MockInvoiceService = {
-  getAll: () => getAll<Invoice>(STORAGE_KEYS.invoices),
-  getById: (id: string) => getById<Invoice>(STORAGE_KEYS.invoices, id),
-  create: (invoice: Invoice) => create<Invoice>(STORAGE_KEYS.invoices, invoice),
-  update: (id: string, updates: Partial<Invoice>) => update<Invoice>(STORAGE_KEYS.invoices, id, updates),
-  delete: (id: string) => remove<Invoice>(STORAGE_KEYS.invoices, id),
-};
-
-// Payment Service
-export const MockPaymentService = {
-  getAll: () => getAll<Payment>(STORAGE_KEYS.payments),
-  getByInvoice: (invoiceId: string) => getAll<Payment>(STORAGE_KEYS.payments).filter(p => p.invoice_id === invoiceId),
-  create: (payment: Payment) => create<Payment>(STORAGE_KEYS.payments, payment),
-};
-
-// Operational Expense Service
-export const MockOperationalExpenseService = {
-  getAll: () => getAll<OperationalExpense>(STORAGE_KEYS.operational_expenses),
-  create: (expense: OperationalExpense) => create<OperationalExpense>(STORAGE_KEYS.operational_expenses, expense),
-  update: (id: string, updates: Partial<OperationalExpense>) => update<OperationalExpense>(STORAGE_KEYS.operational_expenses, id, updates),
-  delete: (id: string) => remove<OperationalExpense>(STORAGE_KEYS.operational_expenses, id),
-};
-
-// Payroll Service
-export const MockPayrollService = {
-  getAll: () => getAll<Payroll>(STORAGE_KEYS.payrolls),
-  getByWorker: (workerId: string) => getAll<Payroll>(STORAGE_KEYS.payrolls).filter(p => p.worker_id === workerId),
-  getByProject: (projectId: string) => getAll<Payroll>(STORAGE_KEYS.payrolls).filter(p => p.project_id === projectId),
-  create: (payroll: Payroll) => create<Payroll>(STORAGE_KEYS.payrolls, payroll),
-  update: (id: string, updates: Partial<Payroll>) => update<Payroll>(STORAGE_KEYS.payrolls, id, updates),
-};
-
-// Loan Service
-export const MockLoanService = {
-  getAll: () => getAll<Loan>(STORAGE_KEYS.loans),
-  getByWorker: (workerId: string) => getAll<Loan>(STORAGE_KEYS.loans).filter(l => l.worker_id === workerId),
-  create: (loan: Loan) => create<Loan>(STORAGE_KEYS.loans, loan),
-  update: (id: string, updates: Partial<Loan>) => update<Loan>(STORAGE_KEYS.loans, id, updates),
-};
-
-// Notification Service
-export const MockNotificationService = {
-  getAll: () => getAll<Notification>(STORAGE_KEYS.notifications),
-  getUnread: () => getAll<Notification>(STORAGE_KEYS.notifications).filter(n => !n.is_read),
-  create: (notification: Notification) => create<Notification>(STORAGE_KEYS.notifications, notification),
-  markAsRead: (id: string) => update<Notification>(STORAGE_KEYS.notifications, id, { is_read: true }),
-  markAllAsRead: () => { setStorageItem(STORAGE_KEYS.notifications, getAll<Notification>(STORAGE_KEYS.notifications).map(n => ({ ...n, is_read: true }))); },
-};
-
-// Settings Service
-export const MockSettingsService = {
-  get: (): AppSettings => getStorageItem<AppSettings>(STORAGE_KEYS.settings, defaultSettings),
-  update: (updates: Partial<AppSettings>) => { const current = getStorageItem<AppSettings>(STORAGE_KEYS.settings, defaultSettings); const updated = { ...current, ...updates }; setStorageItem(STORAGE_KEYS.settings, updated); return updated; },
-};
-
-// Dashboard stats
+// ── Dashboard ─────────────────────────────────────────────────────────────────
 export function getDashboardStats(): DashboardStats {
-  const entries = getAll<Entry>(STORAGE_KEYS.entries);
-  const invoices = getAll<Invoice>(STORAGE_KEYS.invoices);
-  const products = getAll<Product>(STORAGE_KEYS.products);
-  const projects = getAll<Project>(STORAGE_KEYS.projects);
-  const today = new Date().toISOString().split('T')[0];
-  const todayEntries = entries.filter(e => e.date === today);
-  const totalIncome = entries.reduce((sum, e) => sum + e.amount, 0);
-  const pendingInvoices = invoices.filter(inv => inv.status !== 'paid');
-  const pendingAmount = pendingInvoices.reduce((sum, inv) => sum + (inv.amount - inv.paid_amount), 0);
-  const warehouseValue = products.reduce((sum, p) => sum + p.price * p.quantity, 0);
+  const totalBalance = _projects.reduce((s, p) => s + (p.budget - p.spent), 0);
+  const pendingPayments = _invoices.filter(i => i.status !== 'paid').reduce((s, i) => s + (i.amount - i.paid_amount), 0);
+  const warehouseValue = _products.reduce((s, p) => s + p.price * p.quantity, 0);
+  const nowStr = new Date().toISOString().substring(0, 7);
+  const monthly_income = _purchases.filter(x => x.date?.startsWith(nowStr)).reduce((s, x) => s + x.total, 0);
+  const monthly_expense = _expenses.filter(x => x.date?.startsWith(nowStr)).reduce((s, x) => s + x.amount, 0);
   return {
-    total_balance: totalIncome - pendingAmount, pending_payments: pendingAmount,
-    today_entries: todayEntries.reduce((sum, e) => sum + e.amount, 0), warehouse_value: warehouseValue,
-    monthly_income: totalIncome * 0.3, monthly_expense: pendingAmount * 0.6,
-    active_projects: projects.filter(p => p.status === 'active').length,
-    low_stock_products: products.filter(p => p.quantity <= p.min_stock).length,
+    total_balance: totalBalance,
+    pending_payments: pendingPayments,
+    today_entries: 0,
+    warehouse_value: warehouseValue,
+    monthly_income,
+    monthly_expense,
+    active_projects: _projects.filter(p => p.status === 'active').length,
+    low_stock_products: _products.filter(p => p.quantity <= p.min_stock).length
   };
 }
 
+const ML = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 export function getMonthlyData(): MonthlyData[] {
-  const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun'];
-  return months.map(m => ({ month: m, income: Math.floor(Math.random() * 50000) + 20000, expense: Math.floor(Math.random() * 35000) + 10000 }));
+  const now = new Date();
+  return Array.from({ length: 6 }, (_, i) => {
+    const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
+    const m = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    return {
+      month: ML[d.getMonth()],
+      income: _purchases.filter(x => x.date?.startsWith(m)).reduce((s, x) => s + x.total, 0),
+      expense: _expenses.filter(x => x.date?.startsWith(m)).reduce((s, x) => s + x.amount, 0)
+    };
+  });
 }
 
+const COLORS = ['#1B4332','#2D6A4F','#A7C4B5','#D4A574','#C97B7B','#6B6B6B'];
 export function getProjectDistribution(): ProjectDistribution[] {
-  const projects = getAll<Project>(STORAGE_KEYS.projects);
-  const colors = ['#1B4332', '#2D6A4F', '#A8C5A8', '#D4A574', '#8B6914', '#C9A84C'];
-  return projects.slice(0, 6).map((p, i) => ({ name: p.name, value: p.spent, color: colors[i % colors.length] }));
+  return _projects.slice(0, 6).map((p, i) => ({
+    name: p.name,
+    value: p.spent || p.budget || 0,
+    color: COLORS[i % COLORS.length]
+  }));
 }
+
+// ── Auth shim ─────────────────────────────────────────────────────────────────
+const SK = 'cf_user_session_v2';
+export const MockAuthService = {
+  login: (_pin: string) => null,
+  logout: () => { localStorage.removeItem(SK); },
+  getSession: () => { try { const s = localStorage.getItem(SK); return s ? JSON.parse(s) : null; } catch { return null; } },
+};
+
+// ── Projects ──────────────────────────────────────────────────────────────────
+export const MockProjectService = {
+  getAll: () => [..._projects],
+  getById: (id: string) => _projects.find(p => p.id === id) ?? null,
+  create: async (data: Partial<Project>) => {
+    const { data: r } = await supabase.from('cf_proyectos').insert({
+      business_id: BID, name: data.name!, description: data.description ?? '',
+      budget: data.budget ?? 0, spent: 0, status: data.status ?? 'active',
+      pipeline_stage: data.pipeline_stage ?? 'planning', manager_name: data.created_by_name ?? ''
+    }).select().single();
+    if (r) { const np: Project = { ...data as Project, id: r.id, created_at: r.created_at, spent: 0 }; _projects.push(np); return np; }
+    return null;
+  },
+  update: async (id: string, data: Partial<Project>) => {
+    await supabase.from('cf_proyectos').update({
+      name: data.name, description: data.description, budget: data.budget,
+      status: data.status, pipeline_stage: data.pipeline_stage
+    }).eq('id', id);
+    const idx = _projects.findIndex(p => p.id === id);
+    if (idx >= 0) { _projects[idx] = { ..._projects[idx], ...data }; return _projects[idx]; }
+    return null;
+  },
+  delete: async (id: string) => {
+    await supabase.from('cf_proyectos').delete().eq('id', id);
+    _projects = _projects.filter(p => p.id !== id);
+  },
+};
+
+// ── Entries ───────────────────────────────────────────────────────────────────
+export const MockEntryService = {
+  getAll: () => {
+    const entries: any[] = [];
+    _purchases.slice(0, 30).forEach(p => entries.push({
+      id: p.id, project_id: '', project_name: '', type: 'entry',
+      quantity: p.quantity, amount: p.total, date: p.date, time: '',
+      user_id: '', user_name: p.created_by_name ?? '', notes: p.supplier, created_at: p.created_at
+    }));
+    _expenses.slice(0, 20).forEach(e => entries.push({
+      id: e.id, project_id: e.project_id, project_name: e.project_name, type: 'gasto',
+      quantity: 1, amount: -e.amount, date: e.date, time: '',
+      user_id: '', user_name: '', notes: e.description, created_at: e.created_at
+    }));
+    return entries.sort((a, b) => new Date(b.date || b.created_at).getTime() - new Date(a.date || a.created_at).getTime());
+  },
+  getByProject: (projectId: string) => MockEntryService.getAll().filter((e: any) => e.project_id === projectId),
+  create: async (data: any) => {
+    const row = {
+      business_id: BID, product_name: data.notes ?? '',
+      supplier: data.user_name ?? 'Manual', quantity: data.quantity ?? 1,
+      unit_price: data.amount ?? 0, total: data.amount ?? 0,
+      date: data.date ?? new Date().toISOString().slice(0, 10)
+    };
+    const { data: r } = await supabase.from('cf_compras').insert(row).select().single();
+    if (r) { _purchases.unshift({ ...row, id: r.id, product_id: '', image_url: '', created_by: '', created_by_name: '', created_at: r.created_at }); return { ...data, id: r.id, created_at: r.created_at }; }
+    return null;
+  },
+};
+
+// ── Products (Almacén) ────────────────────────────────────────────────────────
+export const MockProductService = {
+  getAll: () => [..._products],
+  getById: (id: string) => _products.find(p => p.id === id) ?? null,
+  create: async (data: Partial<Product>) => {
+    const { data: r } = await supabase.from('cf_inventario').insert({ business_id: BID, ...data }).select().single();
+    if (r) { const np = { ...data as Product, id: r.id, created_at: r.created_at }; _products.push(np); return np; }
+    return null;
+  },
+  update: async (id: string, data: Partial<Product>) => {
+    await supabase.from('cf_inventario').update(data).eq('id', id);
+    const idx = _products.findIndex(p => p.id === id);
+    if (idx >= 0) { _products[idx] = { ..._products[idx], ...data }; return _products[idx]; }
+    return null;
+  },
+  delete: async (id: string) => {
+    await supabase.from('cf_inventario').delete().eq('id', id);
+    _products = _products.filter(p => p.id !== id);
+  },
+};
+
+export const MockMovementService = {
+  getAll: (): InventoryMovement[] => [],
+  getByProduct: (_productId: string): InventoryMovement[] => [],
+  create: async (_data: Partial<InventoryMovement>) => null,
+};
+
+// ── Purchases ─────────────────────────────────────────────────────────────────
+export const MockPurchaseService = {
+  getAll: () => [..._purchases],
+  getById: (id: string) => _purchases.find(p => p.id === id) ?? null,
+  create: async (data: Partial<Purchase>) => {
+    const row = {
+      business_id: BID, supplier: data.supplier, product_id: data.product_id ?? null,
+      product_name: data.product_name ?? '', quantity: data.quantity ?? 0,
+      unit_price: data.unit_price ?? 0, total: data.total ?? 0,
+      date: data.date ?? new Date().toISOString().slice(0, 10), image_url: data.image_url ?? ''
+    };
+    const { data: r } = await supabase.from('cf_compras').insert(row).select().single();
+    if (r) { const np = { ...data as Purchase, id: r.id, created_at: r.created_at }; _purchases.unshift(np); return np; }
+    return null;
+  },
+  delete: async (id: string) => {
+    await supabase.from('cf_compras').delete().eq('id', id);
+    _purchases = _purchases.filter(p => p.id !== id);
+  },
+};
+
+// ── Invoices ──────────────────────────────────────────────────────────────────
+export const MockInvoiceService = {
+  getAll: () => [..._invoices],
+  getById: (id: string) => _invoices.find(i => i.id === id) ?? null,
+  create: async (data: Partial<Invoice>) => {
+    const row = {
+      business_id: BID, project_id: data.project_id ?? '', project_name: data.project_name ?? '',
+      invoice_number: data.invoice_number ?? `FAC-${Date.now()}`, supplier: data.supplier ?? '',
+      amount: data.amount ?? 0, paid_amount: 0, payment_type: data.payment_type ?? 'cash',
+      credit_days: data.credit_days ?? 0, status: 'pending', image_url: data.image_url ?? '', notes: data.notes ?? ''
+    };
+    const { data: r } = await supabase.from('cf_facturas').insert(row).select().single();
+    if (r) { const ni = { ...data as Invoice, id: r.id, paid_amount: 0, status: 'pending' as const, created_at: r.created_at }; _invoices.unshift(ni); return ni; }
+    return null;
+  },
+  update: async (id: string, data: Partial<Invoice>) => {
+    await supabase.from('cf_facturas').update(data).eq('id', id);
+    const idx = _invoices.findIndex(i => i.id === id);
+    if (idx >= 0) { _invoices[idx] = { ..._invoices[idx], ...data }; return _invoices[idx]; }
+    return null;
+  },
+  delete: async (id: string) => {
+    await supabase.from('cf_facturas').delete().eq('id', id);
+    _invoices = _invoices.filter(i => i.id !== id);
+  },
+};
+export const MockPaymentService = { getAll: () => [] as any[], create: async (_d: any) => null };
+
+// ── Workers ───────────────────────────────────────────────────────────────────
+export const MockWorkerService = {
+  getAll: () => [..._workers],
+  getActive: () => _workers.filter(w => w.is_active),
+  getById: (id: string) => _workers.find(w => w.id === id) ?? null,
+  create: async (data: Partial<Worker>) => {
+    const { data: r } = await supabase.from('cf_empleados').insert({
+      business_id: BID, full_name: data.full_name, phone: data.phone ?? '',
+      daily_rate: data.daily_rate ?? 0, pay_frequency: data.pay_frequency ?? 'daily',
+      is_active: data.is_active ?? true
+    }).select().single();
+    if (r) { const nw = { ...data as Worker, id: r.id, created_at: r.created_at }; _workers.push(nw); return nw; }
+    return null;
+  },
+  update: async (id: string, data: Partial<Worker>) => {
+    await supabase.from('cf_empleados').update(data).eq('id', id);
+    const idx = _workers.findIndex(w => w.id === id);
+    if (idx >= 0) { _workers[idx] = { ..._workers[idx], ...data }; return _workers[idx]; }
+    return null;
+  },
+  delete: async (id: string) => {
+    await supabase.from('cf_empleados').delete().eq('id', id);
+    _workers = _workers.filter(w => w.id !== id);
+  },
+};
+
+// ── Expenses ──────────────────────────────────────────────────────────────────
+export const MockExpenseService = {
+  getAll: () => [..._expenses],
+  create: async (data: Partial<OperationalExpense>) => {
+    const row = {
+      business_id: BID, category: data.category ?? 'other', description: data.description ?? '',
+      amount: data.amount ?? 0, date: data.date ?? new Date().toISOString().slice(0, 10),
+      project_id: data.project_id ?? null, project_name: data.project_name ?? '', receipt_url: data.receipt_url ?? ''
+    };
+    const { data: r } = await supabase.from('cf_gastos_operativos').insert(row).select().single();
+    if (r) { const ne = { ...data as OperationalExpense, id: r.id, created_at: r.created_at }; _expenses.unshift(ne); return ne; }
+    return null;
+  },
+  delete: async (id: string) => {
+    await supabase.from('cf_gastos_operativos').delete().eq('id', id);
+    _expenses = _expenses.filter(e => e.id !== id);
+  },
+};
+export const MockOperationalExpenseService = MockExpenseService;
+
+// ── Payroll ───────────────────────────────────────────────────────────────────
+export const MockPayrollService = {
+  getAll: () => [..._payrolls],
+  update: async (id: string, data: Partial<Payroll>) => {
+    await supabase.from('cf_nominas').update(data).eq('id', id);
+    const idx = _payrolls.findIndex(p => p.id === id);
+    if (idx >= 0) { _payrolls[idx] = { ..._payrolls[idx], ...data }; return _payrolls[idx]; }
+    return null;
+  },
+  create: async (data: Partial<Payroll>) => {
+    const row = {
+      business_id: BID, worker_id: data.worker_id, worker_name: data.worker_name ?? '',
+      project_id: data.project_id ?? null, project_name: data.project_name ?? '',
+      days_worked: data.days_worked ?? 0, daily_rate: data.daily_rate ?? 0, total: data.total ?? 0,
+      week_start: data.week_start ?? '', week_end: data.week_end ?? '', is_paid: false, notes: data.notes ?? ''
+    };
+    const { data: r } = await supabase.from('cf_nominas').insert(row).select().single();
+    if (r) { const np = { ...data as Payroll, id: r.id, is_paid: false, created_at: r.created_at }; _payrolls.unshift(np); return np; }
+    return null;
+  },
+  markPaid: async (id: string) => {
+    await supabase.from('cf_nominas').update({ is_paid: true, paid_date: new Date().toISOString().slice(0, 10) }).eq('id', id);
+    const idx = _payrolls.findIndex(p => p.id === id);
+    if (idx >= 0) { _payrolls[idx].is_paid = true; return _payrolls[idx]; }
+    return null;
+  },
+};
+
+// ── Loans ─────────────────────────────────────────────────────────────────────
+export const MockLoanService = {
+  getAll: () => [..._loans],
+  update: async (id: string, data: Partial<Loan>) => {
+    await supabase.from('cf_prestamos').update(data).eq('id', id);
+    const idx = _loans.findIndex(l => l.id === id);
+    if (idx >= 0) { _loans[idx] = { ..._loans[idx], ...data }; return _loans[idx]; }
+    return null;
+  },
+  create: async (data: Partial<Loan>) => {
+    const { data: r } = await supabase.from('cf_prestamos').insert({
+      business_id: BID, worker_id: data.worker_id, worker_name: data.worker_name ?? '',
+      amount: data.amount ?? 0, remaining: data.amount ?? 0, status: 'active',
+      date: new Date().toISOString().slice(0, 10), notes: data.notes ?? ''
+    }).select().single();
+    if (r) { const nl = { ...data as Loan, id: r.id, remaining: data.amount ?? 0, status: 'active' as const, deductions: [], created_at: r.created_at }; _loans.push(nl); return nl; }
+    return null;
+  },
+  addDeduction: async (loanId: string, amount: number, date: string) => {
+    const { data: r } = await supabase.from('cf_deducciones_prestamo').insert({ loan_id: loanId, amount, date, notes: '' }).select().single();
+    const loan = _loans.find(l => l.id === loanId);
+    if (loan && r) {
+      loan.remaining = Math.max(0, loan.remaining - amount);
+      loan.status = loan.remaining === 0 ? 'paid' : 'active';
+      await supabase.from('cf_prestamos').update({ remaining: loan.remaining, status: loan.status }).eq('id', loanId);
+      loan.deductions.push({ id: r.id, loan_id: loanId, amount, date, notes: '', created_at: r.created_at });
+    }
+    return loan ?? null;
+  },
+};
+
+// ── Users ─────────────────────────────────────────────────────────────────────
+export const MockUserService = {
+  getAll: () => [..._users],
+  create: async (data: Partial<User> & { pin: string }) => {
+    const { data: r } = await supabase.from('cf_usuarios_negocio').insert({
+      business_id: BID, full_name: data.full_name, pin: data.pin,
+      role: data.role ?? 'operator', email: data.email ?? '', phone: data.phone ?? '',
+      is_active: true,
+      permissions: data.permissions ?? {
+        dashboard: true, projects: false, warehouse: false, purchases: false,
+        invoices: false, users: false, settings: false, workers: false,
+        operational_expenses: false, payroll: false, loans: false,
+        expense_report: false, full_access: false, investors: false
+      }
+    }).select().single();
+    if (r) { const nu: User = { ...r, avatar_url: '' }; _users.push(nu); return nu; }
+    return null;
+  },
+  update: async (id: string, data: Partial<User>) => {
+    await supabase.from('cf_usuarios_negocio').update(data).eq('id', id);
+    const idx = _users.findIndex(u => u.id === id);
+    if (idx >= 0) { _users[idx] = { ..._users[idx], ...data }; return _users[idx]; }
+    return null;
+  },
+  delete: async (id: string) => {
+    await supabase.from('cf_usuarios_negocio').delete().eq('id', id);
+    _users = _users.filter(u => u.id !== id);
+  },
+};
+
+// ── Settings ──────────────────────────────────────────────────────────────────
+export const MockSettingsService = {
+  get: () => ({ ..._settings }),
+  update: async (data: Partial<AppSettings>) => {
+    _settings = { ..._settings, ...data };
+    await supabase.from('cf_configuracion').upsert({
+      business_id: BID, empresa: data.company_name, direccion: data.company_address,
+      telefono: data.company_phone, moneda: data.currency_symbol,
+      formato_fecha: data.date_format, tema: data.theme
+    });
+    return _settings;
+  },
+};
+
+// ── Notifications (stub) ──────────────────────────────────────────────────────
+let _notifications: any[] = [];
+export const MockNotificationService = {
+  getAll: () => [..._notifications],
+  markAsRead: (id: string) => { const n = _notifications.find(x => x.id === id); if (n) n.is_read = true; },
+  markAllAsRead: () => { _notifications.forEach(n => { n.is_read = true; }); },
+  add: (notif: any) => { _notifications.unshift({ ...notif, id: Date.now().toString(), is_read: false, created_at: new Date().toISOString() }); },
+};
+
+// ── Investors ─────────────────────────────────────────────────────────────────
+export const MockInvestorService = {
+  getAll: () => [..._investors],
+  getById: (id: string) => _investors.find(i => i.id === id) ?? null,
+  create: async (data: Partial<Investor>) => {
+    try {
+      const { data: r } = await supabase.from('cf_inversionistas').insert({
+        business_id: BID, nombre: data.nombre!, email: data.email ?? '',
+        telefono: data.telefono ?? '', empresa: data.empresa ?? '',
+        capital_total: data.capital_total ?? 0, notas: data.notas ?? '', is_active: true
+      }).select().single();
+      if (r) { const ni: Investor = { ...r }; _investors.push(ni); return ni; }
+    } catch (e) { console.error('Inversionistas table not ready. Run migration SQL.', e); }
+    return null;
+  },
+  update: async (id: string, data: Partial<Investor>) => {
+    try {
+      await supabase.from('cf_inversionistas').update(data).eq('id', id);
+      const idx = _investors.findIndex(i => i.id === id);
+      if (idx >= 0) { _investors[idx] = { ..._investors[idx], ...data }; return _investors[idx]; }
+    } catch { }
+    return null;
+  },
+  delete: async (id: string) => {
+    try {
+      await supabase.from('cf_inversionistas').delete().eq('id', id);
+      _investors = _investors.filter(i => i.id !== id);
+    } catch { }
+  },
+
+  // Project investors
+  getProjectInvestors: (proyectoId?: string) => {
+    if (proyectoId) return _projectInvestors.filter(pi => pi.proyecto_id === proyectoId);
+    return [..._projectInvestors];
+  },
+  assignToProject: async (data: Partial<ProjectInvestor>) => {
+    try {
+      const investor = _investors.find(i => i.id === data.inversionista_id);
+      const project = _projects.find(p => p.id === data.proyecto_id);
+      const ganancia = ((data.capital_invertido ?? 0) * (data.porcentaje_ganancia ?? 0)) / 100;
+      const { data: r } = await supabase.from('cf_proyecto_inversionistas').insert({
+        business_id: BID, proyecto_id: data.proyecto_id!, inversionista_id: data.inversionista_id!,
+        capital_invertido: data.capital_invertido ?? 0, porcentaje_ganancia: data.porcentaje_ganancia ?? 0,
+        ganancia_estimada: ganancia, ganancia_real: data.ganancia_real ?? 0,
+        status: data.status ?? 'activo', fecha_inicio: data.fecha_inicio ?? null,
+        fecha_pago: data.fecha_pago ?? null, notas: data.notas ?? ''
+      }).select().single();
+      if (r) {
+        const npi: ProjectInvestor = {
+          ...r, project_name: project?.name ?? '', investor_name: investor?.nombre ?? ''
+        };
+        _projectInvestors.push(npi);
+        return npi;
+      }
+    } catch (e) { console.error('cf_proyecto_inversionistas error', e); }
+    return null;
+  },
+  updateProjectInvestor: async (id: string, data: Partial<ProjectInvestor>) => {
+    try {
+      await supabase.from('cf_proyecto_inversionistas').update(data).eq('id', id);
+      const idx = _projectInvestors.findIndex(pi => pi.id === id);
+      if (idx >= 0) { _projectInvestors[idx] = { ..._projectInvestors[idx], ...data }; return _projectInvestors[idx]; }
+    } catch { }
+    return null;
+  },
+  deleteProjectInvestor: async (id: string) => {
+    try {
+      await supabase.from('cf_proyecto_inversionistas').delete().eq('id', id);
+      _projectInvestors = _projectInvestors.filter(pi => pi.id !== id);
+    } catch { }
+  },
+};
